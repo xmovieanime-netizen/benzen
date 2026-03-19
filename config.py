@@ -8,7 +8,7 @@ class Config:
     """Configuration management for the bot"""
     
     # Telegram Bot Configuration
-    BOT_TOKEN: str = os.getenv('BOT_TOKEN', '8209097581:AAGylxwuy3i8s6XBmldszduJhH--vS_ZAL8')
+    BOT_TOKEN: str = os.getenv('BOT_TOKEN', '8609241945:AAGeW4pbZFiS8vHSqZcJPYlZPoHRrpCYhHM')
     API_ID: int = int(os.getenv('API_ID', '28271319'))
     API_HASH: str = os.getenv('API_HASH', '84d8b635a127218158581c0fd8225770')
     
