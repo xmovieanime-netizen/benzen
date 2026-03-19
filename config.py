@@ -17,7 +17,7 @@ class Config:
     DATABASE_NAME: str = os.getenv('DATABASE_NAME', 'group_manager')
     
     # Bot Owner Configuration
-    BOT_OWNER_ID: int = int(os.getenv('BOT_OWNER_ID', '6281230179'))
+    BOT_OWNER_ID: int = int(os.getenv('BOT_OWNER_ID', '6178527968'))
     
     # Webhook Configuration (for Heroku/Northflank deployment)
     WEBHOOK_URL: str = os.getenv('WEBHOOK_URL', '')  # e.g., https://yourapp.herokuapp.com
