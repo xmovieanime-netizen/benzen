@@ -9,22 +9,24 @@ from telegram.constants import ChatMemberStatus
 
 logger = logging.getLogger(__name__)
 
+
 def encrypt_link(link: str) -> str:
-    """Encrypt Twitter/X link using SHA-256"""
+    """Hash Twitter/X link using SHA-256 (truncated to 16 hex chars for display)."""
     return hashlib.sha256(link.encode()).hexdigest()[:16]
+
 
 def parse_duration(duration_str: str) -> timedelta:
     """
-    Parse duration string like '2d 5h 30m 10s' into timedelta
-    Returns default 3 days if invalid or empty
+    Parse duration string like '2d 5h 30m 10s' into timedelta.
+    Returns default 3 days if invalid or empty.
     """
     if not duration_str:
         return timedelta(days=3)
-    
+
     total_seconds = 0
     pattern = r'(\d+)\s*([dhms]|day|days|hour|hours|minute|minutes|second|seconds)'
     matches = re.findall(pattern, duration_str.lower())
-    
+
     for value, unit in matches:
         value = int(value)
         if unit in ['d', 'day', 'days']:
@@ -35,25 +37,29 @@ def parse_duration(duration_str: str) -> timedelta:
             total_seconds += value * 60
         elif unit in ['s', 'second', 'seconds']:
             total_seconds += value
-    
+
     return timedelta(seconds=total_seconds) if total_seconds > 0 else timedelta(days=3)
 
+
 def extract_twitter_links(text: str) -> List[str]:
-    """Extract Twitter/X links from text"""
+    """Extract Twitter/X links from text, stripping trailing punctuation."""
     if not text:
         return []
-    
+
+    # Match URL then strip trailing punctuation characters
     patterns = [
         r'https?://(?:www\.)?twitter\.com/[^\s]+',
         r'https?://(?:www\.)?x\.com/[^\s]+',
         r'https?://t\.co/[^\s]+'
     ]
-    
+
     links = []
     for pattern in patterns:
         found = re.findall(pattern, text)
+        # Strip trailing punctuation that was swept up by the greedy match
+        found = [re.sub(r'[.,!?)\'\"]+$', '', lnk) for lnk in found]
         links.extend(found)
-    
+
     # Remove duplicates while preserving order
     seen = set()
     unique_links = []
@@ -61,60 +67,58 @@ def extract_twitter_links(text: str) -> List[str]:
         if link not in seen:
             seen.add(link)
             unique_links.append(link)
-    
+
     return unique_links
 
+
 def extract_username_from_link(link: str) -> str:
-    """Extract username from Twitter/X link"""
+    """Extract username from Twitter/X link."""
     patterns = [
-        r'twitter\.com/([^/\s?]+)',
-        r'x\.com/([^/\s?]+)'
+        r'twitter\.com/([^/\s?#]+)',
+        r'x\.com/([^/\s?#]+)'
     ]
-    
+
     for pattern in patterns:
         match = re.search(pattern, link)
         if match:
             return match.group(1)
-    
+
     return "unknown"
 
+
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Check if user is admin in the group"""
+    """Check if user is admin in the group. Returns False on any error."""
     if update.effective_chat.type == 'private':
         return True
-    
+
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
-    
+
     try:
         member = await context.bot.get_chat_member(chat_id, user_id)
-        # Check for both old and new attribute names for compatibility
         is_admin_status = member.status in [
-            ChatMemberStatus.OWNER,  # New name in python-telegram-bot v20+
+            ChatMemberStatus.OWNER,
             ChatMemberStatus.ADMINISTRATOR
         ]
         logger.info(f"Admin check for user {user_id} in chat {chat_id}: status={member.status}, is_admin={is_admin_status}")
         return is_admin_status
-    except AttributeError as e:
-        logger.error(f"AttributeError in admin check: {e}. Using string comparison fallback.")
-        # Fallback to string comparison if attributes don't exist
+    except AttributeError:
+        # Fallback for older python-telegram-bot versions
         try:
             member = await context.bot.get_chat_member(chat_id, user_id)
             is_admin_status = member.status in ['creator', 'administrator']
             logger.info(f"Admin check (fallback) for user {user_id}: status={member.status}, is_admin={is_admin_status}")
             return is_admin_status
         except Exception as e2:
-            logger.error(f"Fallback admin check also failed: {e2}")
-            return True
+            logger.error(f"Fallback admin check failed for user {user_id} in chat {chat_id}: {e2}")
+            return False  # Safe default — do NOT grant admin on error
     except Exception as e:
         logger.error(f"Error checking admin status for user {user_id} in chat {chat_id}: {e}")
-        # If we can't check (e.g., bot is not admin), assume user might be admin
-        # This happens when bot doesn't have permission to get chat member info
-        logger.warning(f"Returning True by default - bot may need admin permissions in chat {chat_id}")
-        return True
+        return False  # Safe default — do NOT grant admin on error
+
 
 def format_user_mention(user_id: int, username: str = None, first_name: str = None) -> str:
-    """Format user mention for messages"""
+    """Format user mention for messages."""
     if username:
         return f"@{username}"
     elif first_name:
@@ -122,10 +126,11 @@ def format_user_mention(user_id: int, username: str = None, first_name: str = No
     else:
         return f"User {user_id}"
 
+
 def escape_html(text: str) -> str:
-    """Escape HTML special characters to prevent parsing errors"""
+    """Escape HTML special characters to prevent parsing errors."""
     if not text:
-        return text
+        return text or ''
     return (text
             .replace('&', '&amp;')
             .replace('<', '&lt;')
