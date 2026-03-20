@@ -1,7 +1,6 @@
-import asyncio
 import logging
 from telegram import Update
-from telegram.ext import Application, TypeHandler
+from telegram.ext import Application, TypeHandler, ApplicationHandlerStop
 from config import config
 from database import MongoDB
 from handlers import (
@@ -24,26 +23,24 @@ logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
 
 # ──────────────────────────────────────────────
-#  OWNER-ONLY GATE
-#  This runs before every single update.
-#  If the sender is not the bot owner, the update
-#  is silently dropped (no response sent).
+#  OWNER-ONLY PRIVATE CHAT GATE
+#  Only blocks private-chat updates from non-owners.
+#  Group updates pass through so group admins can use commands.
 # ──────────────────────────────────────────────
 async def owner_only_gate(update: Update, context) -> None:
-    """Block all updates from users who are not the bot owner."""
-    # Allow updates that have no real sender (channel posts, etc.)
+    """Block private-chat updates from non-owner users."""
     user = update.effective_user
     if user is None:
-        return  # let it pass
+        return  # channel posts / no sender — let pass
+
+    chat = update.effective_chat
+    # Only restrict in private chats; groups are governed per-handler
+    if chat and chat.type != 'private':
+        return
 
     if user.id != config.BOT_OWNER_ID:
-        # Silently ignore — don't reply, don't log spam
-        logger.debug(f"Blocked update from non-owner user {user.id} (@{user.username})")
-        raise ApplicationHandlerStop   # stop processing this update
-
-
-# Import here to avoid circular import issues
-from telegram.ext import ApplicationHandlerStop
+        logger.debug(f"Blocked private update from non-owner {user.id} (@{user.username})")
+        raise ApplicationHandlerStop
 
 
 # Application lifecycle hooks
@@ -51,21 +48,17 @@ async def post_init(application: Application):
     """Initialize bot after application is ready"""
     logger.info("Initializing bot...")
 
-    # Validate configuration
     try:
         config.validate()
     except ValueError as e:
         logger.error(f"Configuration error: {e}")
         raise
 
-    # Connect to database
     db = MongoDB(config.MONGODB_URI, config.DATABASE_NAME)
     await db.connect()
-
-    # Store database connection in bot_data
     application.bot_data['db'] = db
 
-    # Restore active sessions from database
+    # Restore active sessions
     try:
         active_sessions = await db.db.sessions.find({'is_active': True}).to_list(length=None)
         if active_sessions:
@@ -75,7 +68,6 @@ async def post_init(application: Application):
                 session_id = str(session['_id'])
                 ad_tracking = session.get('ad_tracking_enabled', False)
                 logger.info(f"  - Chat {chat_id}: Session {session_id}, Ad Tracking: {ad_tracking}")
-            logger.info("All sessions are ready to continue from where they left off!")
         else:
             logger.info("No active sessions found")
     except Exception as e:
@@ -87,12 +79,9 @@ async def post_init(application: Application):
 async def post_shutdown(application: Application):
     """Clean up before shutdown"""
     logger.info("Shutting down bot...")
-
-    # Disconnect from database
     db = application.bot_data.get('db')
     if db:
         await db.disconnect()
-
     logger.info("Bot shutdown complete!")
 
 
@@ -100,7 +89,6 @@ def main():
     """Main function to run the bot"""
     logger.info("Starting Telegram Group Management Bot...")
 
-    # Create application
     application = (
         Application.builder()
         .token(config.BOT_TOKEN)
@@ -109,19 +97,16 @@ def main():
         .build()
     )
 
-    # ── Register owner-only gate FIRST (group=-999 runs before everything) ──
+    # Register owner gate FIRST — only affects private chats
     application.add_handler(TypeHandler(Update, owner_only_gate), group=-999)
 
-    # Register all feature handlers
     register_admin_handlers(application)
     register_user_handlers(application)
     register_moderation_handlers(application)
     register_message_handlers(application)
 
     logger.info("All handlers registered successfully!")
-    logger.info(f"Bot restricted to owner ID: {config.BOT_OWNER_ID}")
-
-    # Run the bot
+    logger.info(f"Bot owner ID: {config.BOT_OWNER_ID}")
     logger.info("Bot is now running!")
 
     if config.USE_WEBHOOK:
@@ -134,7 +119,9 @@ def main():
         )
     else:
         logger.info("Running in polling mode")
-        application.run_polling(allowed_updates=['message', 'callback_query'])
+        application.run_polling(
+            allowed_updates=['message', 'callback_query', 'edited_message']
+        )
 
 
 if __name__ == '__main__':
