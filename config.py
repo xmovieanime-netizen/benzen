@@ -4,17 +4,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def _require(name: str) -> str:
-    """Get a required env var — crash with a clear message if missing."""
-    value = os.getenv(name)
-    if not value:
-        raise RuntimeError(
-            f"Missing required environment variable: {name}\n"
-            f"Set it in your .env file or in your hosting platform's env config."
-        )
-    return value
-
-
 class Config:
     """Configuration management for the bot — all values come from environment variables."""
 
@@ -29,11 +18,6 @@ class Config:
 
     # Bot Owner Configuration
     BOT_OWNER_ID: int = int(os.getenv('BOT_OWNER_ID', '0'))
-
-    # Webhook Configuration (for Heroku/Northflank deployment)
-    WEBHOOK_URL: str = os.getenv('WEBHOOK_URL', '')
-    PORT: int = int(os.getenv('PORT', '8443'))
-    USE_WEBHOOK: bool = os.getenv('USE_WEBHOOK', 'false').lower() == 'true'
 
     # Feature Flags
     ENABLE_FRAUD_DETECTION: bool = os.getenv('ENABLE_FRAUD_DETECTION', 'true').lower() == 'true'
@@ -55,8 +39,6 @@ class Config:
             raise ValueError("MONGODB_URI is required — set it in .env or hosting env vars")
         if cls.BOT_OWNER_ID == 0:
             raise ValueError("BOT_OWNER_ID is required — set it in .env or hosting env vars")
-        if cls.USE_WEBHOOK and not cls.WEBHOOK_URL:
-            raise ValueError("WEBHOOK_URL is required when USE_WEBHOOK is true")
         return True
 
 
