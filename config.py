@@ -13,7 +13,7 @@ class Config:
     API_HASH: str = os.getenv('API_HASH', '84d8b635a127218158581c0fd8225770')
     
     # MongoDB Configuration
-    MONGODB_URI: str = os.getenv('MONGODB_URI', 'mongodb+srv://theamanchaudhary:updatesbyaman@cluster0.qda0aop.mongodb.net/?appName=Cluster0')
+    MONGODB_URI: str = os.getenv('MONGODB_URI', 'mongodb+srv://Capture:capture@cluster0.7jqepnf.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')
     DATABASE_NAME: str = os.getenv('DATABASE_NAME', 'group_manager')
     
     # Bot Owner Configuration
