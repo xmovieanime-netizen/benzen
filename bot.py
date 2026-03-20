@@ -32,10 +32,9 @@ async def owner_only_gate(update: Update, context) -> None:
     """Block private-chat updates from non-owner users."""
     user = update.effective_user
     if user is None:
-        return  # channel posts / no sender — let pass
+        return
 
     chat = update.effective_chat
-    # Only restrict in private chats; groups are governed per-handler
     if chat and chat.type != 'private':
         return
 
@@ -46,14 +45,11 @@ async def owner_only_gate(update: Update, context) -> None:
 
 # ──────────────────────────────────────────────
 #  GLOBAL ERROR HANDLER
-#  Catches all unhandled exceptions from handlers
-#  so they are logged cleanly instead of crashing.
 # ──────────────────────────────────────────────
 async def error_handler(update: object, context) -> None:
     """Handle all errors raised during update processing."""
     error = context.error
 
-    # Conflict means another bot instance is running — log clearly
     if isinstance(error, Conflict):
         logger.critical(
             "CONFLICT ERROR: Another bot instance is already running with this token! "
@@ -62,16 +58,16 @@ async def error_handler(update: object, context) -> None:
         )
         return
 
-    # Network errors are transient — PTB will retry automatically
     if isinstance(error, NetworkError):
         logger.warning(f"Network error (will retry): {error}")
         return
 
-    # Everything else — log the full traceback
     logger.error(f"Unhandled exception while processing update: {update}", exc_info=error)
 
 
-# Application lifecycle hooks
+# ──────────────────────────────────────────────
+#  LIFECYCLE HOOKS
+# ──────────────────────────────────────────────
 async def post_init(application: Application):
     """Initialize bot after application is ready."""
     logger.info("Initializing bot...")
@@ -82,7 +78,7 @@ async def post_init(application: Application):
         logger.error(f"Configuration error: {e}")
         raise
 
-    # ── Delete any stale webhook so polling works without Conflict ──
+    # Clear any stale webhook so polling works without Conflict
     try:
         await application.bot.delete_webhook(drop_pending_updates=True)
         logger.info("Webhook cleared — polling mode is clean")
@@ -102,9 +98,7 @@ async def post_init(application: Application):
                 chat_id = session['chat_id']
                 session_id = str(session['_id'])
                 ad_tracking = session.get('ad_tracking_enabled', False)
-                logger.info(
-                    f"  - Chat {chat_id}: Session {session_id}, Ad Tracking: {ad_tracking}"
-                )
+                logger.info(f"  - Chat {chat_id}: Session {session_id}, Ad Tracking: {ad_tracking}")
         else:
             logger.info("No active sessions found")
     except Exception as e:
@@ -122,6 +116,9 @@ async def post_shutdown(application: Application):
     logger.info("Bot shutdown complete!")
 
 
+# ──────────────────────────────────────────────
+#  MAIN
+# ──────────────────────────────────────────────
 def main():
     """Main function to run the bot."""
     logger.info("Starting Telegram Group Management Bot...")
@@ -134,10 +131,10 @@ def main():
         .build()
     )
 
-    # Register global error handler FIRST — catches Conflict and all other errors
+    # Register global error handler first
     application.add_error_handler(error_handler)
 
-    # Register owner gate — only affects private chats (group=-999 runs before everything)
+    # Register owner gate — only affects private chats
     application.add_handler(TypeHandler(Update, owner_only_gate), group=-999)
 
     register_admin_handlers(application)
@@ -149,20 +146,10 @@ def main():
     logger.info(f"Bot owner ID: {config.BOT_OWNER_ID}")
     logger.info("Bot is now running!")
 
-    if config.USE_WEBHOOK:
-        logger.info(f"Running in webhook mode on port {config.PORT}")
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=config.PORT,
-            url_path=config.BOT_TOKEN,
-            webhook_url=f"{config.WEBHOOK_URL}/{config.BOT_TOKEN}"
-        )
-    else:
-        logger.info("Running in polling mode")
-        application.run_polling(
-            allowed_updates=['message', 'callback_query', 'edited_message'],
-            drop_pending_updates=True   # discard queued updates from while bot was offline
-        )
+    application.run_polling(
+        allowed_updates=['message', 'callback_query', 'edited_message'],
+        drop_pending_updates=True
+    )
 
 
 if __name__ == '__main__':
